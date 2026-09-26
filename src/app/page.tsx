@@ -1,68 +1,203 @@
-import Image from "next/image";
+/**
+ * @module page
+ * @description Main page for the Real-Time AI Virtual Try-On application.
+ * Assembles all components and manages the garment gallery state.
+ *
+ * Layout:
+ * - Desktop: Side-by-side (video left, controls right)
+ * - Mobile: Stacked (video top, controls below)
+ */
 
-export default function Home() {
+"use client";
+
+import React, { useCallback, useState } from "react";
+import { useRealtimeTryOn } from "./hooks/useRealtimeTryOn";
+import type { GarmentItem } from "./types/tryon";
+
+import CameraPermission from "./components/CameraPermission";
+import CameraPreview from "./components/CameraPreview";
+import TryOnVideo from "./components/TryOnVideo";
+import GarmentUploader from "./components/GarmentUploader";
+import GarmentGallery from "./components/GarmentGallery";
+import SessionControls from "./components/SessionControls";
+import LoadingState from "./components/LoadingState";
+import Diagnostics from "./components/Diagnostics";
+
+export default function HomePage() {
+  // ── Core hook ─────────────────────────────────────────────────────────
+  const {
+    state,
+    cameraStream,
+    outputStream,
+    start,
+    stop,
+    applyGarment,
+    error,
+    isConnected,
+    isProcessing,
+    connectionState,
+    cameraResolution,
+    activeGarmentName,
+    sessionId,
+  } = useRealtimeTryOn();
+
+  // ── Local garment gallery ─────────────────────────────────────────────
+  const [garments, setGarments] = useState<GarmentItem[]>([]);
+  const [activeGarmentId, setActiveGarmentId] = useState<string | null>(null);
+
+  /** Handle a new garment from the uploader — add to gallery and apply. */
+  const handleGarmentReady = useCallback(
+    async (garment: GarmentItem) => {
+      // Add to gallery (avoid duplicates by id)
+      setGarments((prev) => {
+        const exists = prev.some((g) => g.id === garment.id);
+        return exists ? prev : [...prev, garment];
+      });
+      setActiveGarmentId(garment.id);
+      await applyGarment(garment);
+    },
+    [applyGarment]
+  );
+
+  /** Handle gallery selection — apply without reconnection. */
+  const handleSelectGarment = useCallback(
+    async (garment: GarmentItem) => {
+      setActiveGarmentId(garment.id);
+      await applyGarment(garment);
+    },
+    [applyGarment]
+  );
+
+  /** Remove a garment from the gallery. */
+  const handleRemoveGarment = useCallback(
+    (id: string) => {
+      setGarments((prev) => {
+        const garment = prev.find((g) => g.id === id);
+        if (garment) URL.revokeObjectURL(garment.previewUrl);
+        return prev.filter((g) => g.id !== id);
+      });
+      if (activeGarmentId === id) setActiveGarmentId(null);
+    },
+    [activeGarmentId]
+  );
+
+  // ── Determine what to show ────────────────────────────────────────────
+  const isRequesting = state === "REQUESTING_CAMERA";
+  const showPermissionScreen = (state === "IDLE" || isRequesting) && !error;
+  const showVideo =
+    state !== "IDLE" || cameraStream !== null || outputStream !== null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="app">
+      {/* ── Header ── */}
+      <header className="app__header">
+        <div className="app__header-inner">
+          <div className="app__logo">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <h1 className="app__title">Virtual Try-On</h1>
+          </div>
+          <LoadingState state={state} />
+        </div>
+      </header>
+
+      {/* ── Main Content ── */}
+      <main className="app__main">
+        {showPermissionScreen ? (
+          /* ── IDLE: Camera Permission Screen ── */
+          <CameraPermission
+            onRequestCamera={start}
+            isRequesting={isRequesting}
+          />
+        ) : (
+          /* ── Active Session Layout ── */
+          <div className="app__layout">
+            {/* ── Left: Video Area ── */}
+            <div className="app__video-area">
+              <div className="app__video-container">
+                <TryOnVideo
+                  outputStream={outputStream}
+                  cameraStream={cameraStream}
+                  state={state}
+                />
+                <CameraPreview stream={cameraStream} />
+              </div>
+            </div>
+
+            {/* ── Right: Controls ── */}
+            <div className="app__controls">
+              <GarmentUploader
+                onGarmentReady={handleGarmentReady}
+                isProcessing={isProcessing}
+                isConnected={isConnected}
+              />
+
+              <GarmentGallery
+                garments={garments}
+                activeGarmentId={activeGarmentId}
+                onSelectGarment={handleSelectGarment}
+                isProcessing={isProcessing}
+                onRemoveGarment={handleRemoveGarment}
+              />
+
+              <SessionControls
+                state={state}
+                onStart={start}
+                onStop={stop}
+              />
+
+              <Diagnostics
+                state={state}
+                connectionState={connectionState}
+                cameraResolution={cameraResolution}
+                activeGarmentName={activeGarmentName}
+                sessionId={sessionId}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Error Toast ── */}
+        {error && (
+          <div className="error-toast">
+            <div className="error-toast__content">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="error-toast__icon"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+              <p>{error.message}</p>
+            </div>
+            <button
+              className="error-toast__dismiss"
+              onClick={() => {
+                /* Error will reset on next action */
+              }}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+              Dismiss
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );
