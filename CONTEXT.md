@@ -1,4 +1,4 @@
-# Real-Time AI Virtual Try-On Web App
+# VIDTRON — Real-Time AI Virtual Try-On Web App
 
 ## Project Overview
 
@@ -6,9 +6,9 @@ A production-quality standalone web application that enables users to virtually 
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS + Vanilla CSS design system
+- **Styling:** Tailwind CSS v4 + Vanilla CSS design system
 - **AI Backend:** Decart Realtime API (`@decartai/sdk`) — WebRTC-based
 - **VTON Model:** `lucy-vton-latest` (lucy-vton-3.5)
 - **Video:** Browser WebRTC / MediaStream APIs + HTML5 `<video>`
@@ -18,11 +18,11 @@ A production-quality standalone web application that enables users to virtually 
 ## Folder Structure
 
 ```
-vid-tryon/
+VID_TRY_ON_APP/
 ├── src/app/
 │   ├── api/token/route.ts        # Server-side Decart token endpoint
 │   ├── page.tsx                   # Main page (assembles all components)
-│   ├── layout.tsx                 # Root layout (Inter font, SEO meta)
+│   ├── layout.tsx                 # Root layout (Inter font, SEO meta, globals.css)
 │   ├── globals.css                # Premium dark-mode design system
 │   ├── components/
 │   │   ├── CameraPermission.tsx   # Pre-camera-access screen
